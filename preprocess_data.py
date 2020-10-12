@@ -433,8 +433,8 @@ def create_cifars_domain_label(data_folder):
         pickle.dump(domain_labels, f)
         
 if __name__ == '__main__':
-    print('Preparing cifar experiment data')
-    create_cifar_data()
+    #print('Preparing cifar experiment data')
+    #create_cifar_data()
     print('Preparing celeba experiment data')
     create_celeba_data('./data/celeba/images')
     print('Finshed')

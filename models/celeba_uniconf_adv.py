@@ -12,6 +12,25 @@ from models import basenet
 from models import dataloader
 from models.celeba_core import CelebaModel
 import utils
+from torchvision.models import resnet50
+
+
+def get_split_model(layer_num, class_num=None, device=None, base=True):
+    model = resnet50(pretrained=True)
+
+    if class_num is not None:
+        fc_features = model.fc.in_features
+        model.fc = nn.Sequential(nn.Flatten(),
+                                 nn.Linear(fc_features, class_num))
+    model = nn.ModuleList(model.children())
+
+    if base:
+        model = model[:layer_num]
+    else:
+        model = model[layer_num:]
+
+    return nn.Sequential(*model).to(device)
+
 
 class CelebaUniConfAdv(CelebaModel):
     def __init__(self, opt):
@@ -22,13 +41,18 @@ class CelebaUniConfAdv(CelebaModel):
     def set_network(self, opt):
         """Define the network"""
         
-        self.base_network = basenet.ResNet50_base(pretrained=True,
-                                                  dropout=opt['dropout']).to(self.device)
+        # self.base_network = basenet.ResNet50_base(pretrained=True,
+        #                                           dropout=opt['dropout']).to(self.device)
         
         # Two fc layers on top of the base network, one for target classification,
         # one for domain classification
-        self.class_network = nn.Linear(2048, opt['output_dim']).to(self.device)
-        self.domain_network = nn.Linear(2048, 2).to(self.device)
+        # self.class_network = nn.Linear(2048, opt['output_dim']).to(self.device)
+        # self.domain_network = nn.Linear(2048, 2).to(self.device)
+        split_layer = 7
+        self.base_network = get_split_model(split_layer, None, self.device)
+        self.class_network = get_split_model(split_layer, opt['output_dim'], self.device, False)
+        self.domain_network = get_split_model(split_layer, 2, self.device, False)
+
         
     def set_optimizer(self, opt):
         optimizer_setting = opt['optimizer_setting']
@@ -148,23 +172,23 @@ class CelebaUniConfAdv(CelebaModel):
                 features = self.base_network(images)
                 class_outputs = self.class_network(features)
                 domain_outputs = self.domain_network(features)
-            
+
                 class_loss = self._criterion(class_outputs, targets)
                 domain_loss = self._domain_criterion(domain_outputs, targets)
                 test_class_loss += class_loss.item()
                 test_domain_loss += domain_loss.item()
-                
+
                 total += targets.size(0)
                 _, predicted = domain_outputs.max(1)
                 correct += predicted.eq(targets[:, -1].long()).sum().item() 
 
                 class_output_list.append(class_outputs)
                 domain_output_list.append(domain_outputs)
-                feature_list.append(features)
-                
+                feature_list.append(features.cpu())
+
             return test_class_loss, test_domain_loss, torch.cat(class_output_list), \
                    torch.cat(domain_output_list), torch.cat(feature_list), 100.*correct/total
-        
+
     def train(self):
         """Train the model for one epoch, evaluate on validation set and 
         save the best model
@@ -190,7 +214,7 @@ class CelebaUniConfAdv(CelebaModel):
         if (self.epoch) > 1 and (dev_mAP > self.best_dev_mAP):
             self.best_dev_mAP = dev_mAP
             utils.save_state_dict(self.state_dict(), os.path.join(self.save_path, 'best.pth'))
-        
+
         duration = datetime.now() - start_time
         print('Finish training epoch {}, dev class loss: {}, dev doamin loss: {}, dev mAP: {},'\
               'domain_accuracy: {}, time used: {}'
@@ -210,7 +234,7 @@ class CelebaUniConfAdv(CelebaModel):
                                                      self.dev_class_weight)
         dev_mAP = utils.compute_mAP(dev_per_class_AP, self.subclass_idx)
         dev_result = {'output': dev_class_output.cpu().numpy(), 
-                      'feature': dev_feature.cpu().numpy(),
+                      'feature': dev_feature.numpy(),
                       'per_class_AP': dev_per_class_AP,
                       'mAP': dev_mAP,
                       'domain_output': dev_domain_output.cpu().numpy(),
@@ -224,7 +248,7 @@ class CelebaUniConfAdv(CelebaModel):
                                                      self.test_class_weight)
         test_mAP = utils.compute_mAP(test_per_class_AP, self.subclass_idx)
         test_result = {'output': test_class_output.cpu().numpy(), 
-                      'feature': test_feature.cpu().numpy(),
+                      'feature': test_feature.numpy(),
                       'per_class_AP': test_per_class_AP,
                       'mAP': test_mAP,
                       'domain_output': test_domain_output.cpu().numpy(),
