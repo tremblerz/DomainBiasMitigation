@@ -8,4 +8,5 @@ import models.celeba_weighting
 import models.celeba_domain_discriminative
 import models.celeba_domain_independent
 import models.celeba_uniconf_adv
+import models.celeba_pruner
 import models.celeba_gradproj_adv

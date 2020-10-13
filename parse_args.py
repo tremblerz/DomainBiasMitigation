@@ -49,6 +49,7 @@ def collect_args():
                                  'celeba_domain_discriminative',
                                  'celeba_domain_independent',
                                  'celeba_uniconf_adv',
+                                 'celeba_pruner',
                                  'celeba_gradproj_adv',    
                                 ])
     
@@ -490,6 +491,10 @@ def create_exerpiment_setting(opt):
         opt['training_ratio'] = 3
         opt['alpha'] = 1.
         model = models.celeba_uniconf_adv.CelebaUniConfAdv(opt)
+        
+    elif opt['experiment'] == 'celeba_pruner':
+        opt['alpha'] = 1.
+        model = models.celeba_pruner.CelebaPruner(opt)
         
     elif opt['experiment'] == 'celeba_gradproj_adv':
         opt['training_ratio'] = 3
